@@ -312,12 +312,14 @@ class NvidiaDriverBCI(ThirdPartyRepoMixin, DevelopmentContainer):
         kernel_packages += [rpm.name for rpm in kernel_ga_rpms]
 
         # since 595 we use kmp drivers instead of dkms
+        kmp_packages = []
         if _get_driver_branch(self.version) >= 595:
             nvidia_kmp_rpms = _get_nvidia_kmp_rpms(
                 self.version, self.os_version, self.kernel_variant, self.exclusive_arch
             )
             pkgs.extend(nvidia_kmp_rpms)
             kernel_packages += [rpm.name for rpm in nvidia_kmp_rpms]
+            kmp_packages += [rpm.name for rpm in nvidia_kmp_rpms]
 
         open_packages = [p.name for p in self.open_drivers_package_list]
         closed_packages = [p.name for p in self.closed_drivers_package_list]
@@ -360,6 +362,7 @@ class NvidiaDriverBCI(ThirdPartyRepoMixin, DevelopmentContainer):
                 pkg
                 for pkg in pkgs
                 if pkg.name not in open_packages
+                and pkg.name not in kmp_packages
                 and pkg.name not in target_layer_only_packages
                 and pkg.arch in ARCH_FILENAME_MAP[arch]
             ],
@@ -515,8 +518,9 @@ def _get_compute_packages(
         raise ValueError(f"Unknown compute package for {driver_version}")
 
     # since 575 the drivers are dkms-based
-    # however, since 595 we use kmp drivers
-    if driver_branch >= 575 and driver_branch <= 590:
+    # however, since 595 we use kmp drivers for the open driver,
+    # but we still use dkms for the proprietary driver
+    if driver_branch >= 575:
         packages += [
             ThirdPartyPackage("dkms"),
         ]
@@ -636,6 +640,7 @@ def _get_nvidia_kmp_rpms(driver_version, os_version, kernel_variant, exclusive_a
             match driver_version:
                 case "595.71.05":
                     package = "nvidia-open-driver-G07-signed.44120:cuda"
+                    name = f"nvidia-open-driver-G07-signed-cuda-kmp-{kernel_variant}"
                     version = "595.71.05_k6.4.0_150700.53.40"
                     release = "150700.16.8.1"
                 case _:
