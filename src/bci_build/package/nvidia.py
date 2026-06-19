@@ -10,6 +10,7 @@ from pathlib import Path
 
 import requests
 from jinja2 import Template
+from version_utils import rpm
 
 from bci_build.container_attributes import Arch
 from bci_build.container_attributes import BuildType
@@ -821,10 +822,28 @@ for os_version, kernel_variant, exclusive_arch in _NVIDIA_OS_VERSIONS:
 
         kernel_versions = []
 
+        # Find the kernel version used to build the nvidia-kmp driver for branches >= 595
+        built_kernel = None
+        if branch >= 595:
+            try:
+                kmp_rpms = _get_nvidia_kmp_rpms(
+                    ver, os_version, kernel_variant, exclusive_arch
+                )
+                if kmp_rpms:
+                    kmp_rpm_version = kmp_rpms[0].evr[1]
+                    if "_k" in kmp_rpm_version:
+                        built_kernel_raw = kmp_rpm_version.split("_k")[-1]
+                        built_kernel = "-".join(built_kernel_raw.split("_", 1))
+            except ValueError:
+                pass
+
         # these tags are expected when the container image is precompiled
         # the tag is <driver-branch>-<kernel-version>-<kernel-variant>-<os-tag>
         # e.g. 590-6.4.0-150700.53.6-default-sles15.7
         for kernel_version in _get_kernel_versions(kernel_variant, os_version):
+            if built_kernel and rpm.compare_versions(kernel_version, built_kernel) < 0:
+                continue
+
             os_tag = f"sles{os_version.os_version}"
             kernel_versions.append(
                 f"{branch}-{kernel_version}-{kernel_variant}-{os_tag}"
